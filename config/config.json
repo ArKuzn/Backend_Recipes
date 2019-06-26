@@ -1,0 +1,35 @@
+{
+  "development": {
+    "username": "postgres",
+    "password": "postgres",
+    "database": "Users",
+    "host": "127.0.0.1",
+    "dialect": "postgres",
+    "operatorsAliases": false,
+    "define": {
+      "timestamps": false
+    }
+  },
+  "test": {
+    "username": "postgres",
+    "password": null,
+    "database": "Users",
+    "host": "127.0.0.1",
+    "dialect": "postgres",
+    "operatorsAliases": false,
+    "define": {
+      "timestamps": false
+    }
+  },
+  "production": {
+    "username": "postgres",
+    "password": null,
+    "database": "Users",
+    "host": "127.0.0.1",
+    "dialect": "postgres",
+    "operatorsAliases": false,
+    "define": {
+      "timestamps": false
+    }
+  }
+}
