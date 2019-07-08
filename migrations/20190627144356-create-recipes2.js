@@ -2,14 +2,6 @@
 
 module.exports = {
   up: (queryInterface, Sequelize) => {
-    /*
-      Add altering commands here.
-      Return a promise to correctly handle asynchronicity.
-
-      Example:
-      return queryInterface.createTable('users', { id: Sequelize.INTEGER });
-    */
-
     return queryInterface.createTable('recipes', {
       id: {
         type: Sequelize.INTEGER,
@@ -40,7 +32,7 @@ module.exports = {
       },
 
       duration: {
-        type: Sequelize.STRING
+        type: Sequelize.INTEGER
       },
       author: {
         type: Sequelize.INTEGER

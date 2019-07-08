@@ -53,6 +53,25 @@ module.exports = (sequelize, DataTypes) => {
     });
     recipe.associate = function (models) {
         // associations can be defined here
+        models.recipes.belongsToMany(models.ingredients, {
+            as: 'ingredientsTable',
+            through: {
+                model: models.ingredientsrecipes,
+                unique: true
+            },
+            foreignKey: 'recipe_id',
+        });
+        models.recipes.hasMany(models.steps, {
+            as: 'stepItem',
+            foreignKey: 'recipe_id',
+        });
     };
+    // recipe.associate = function (models) {
+    //     // associations can be defined here
+    //     models.recipes.hasMany(models.steps, {
+    //         as: 'stepItem',
+    //         foreignKey: 'recipe_id',
+    //     });
+    // };
     return recipe;
 };
