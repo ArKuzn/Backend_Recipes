@@ -51,6 +51,19 @@ const recipeAddFavorites = function (req, res, next) {//add to favorite recipe A
   })
 }
 
+// async (req, res) => {
+//   try {
+//     if (!someData) {
+//       throw new Error({code: 400, message: 'invalid somedata'})
+//     }
+//   } catch (err) {
+//     const code = err.code || 500
+//     const { message } = err
+//     return res.status(code).json({message})
+//   }
+// }
+
+
 const updateFavorites = function (favorites, req, res) {
   db.users.update(
     { favorites: favorites },
@@ -60,7 +73,7 @@ const updateFavorites = function (favorites, req, res) {
     if (user > 0) {
       return res.status(200).json({ msg: 'Recipe added to your favorites recipes', error: false });
     }
-    return res.status(304).json({ msg: 'Update error', error: true });
+    return res.status(400).json({ msg: 'Update error', error: true });
 
   })
 }
@@ -69,8 +82,7 @@ const updateFavorites = function (favorites, req, res) {
 
 const recipeCreate = async function (req, res, next) {//create 
   fileid = 0;
-  let ingredients = [];
-  ingredients = req.body.ingredients.split('|');
+  let ingredients = req.body.ingredients.split('|');
   let steps = [];
   steps = req.body.steps.split('|');
   let imgs = [];
@@ -82,9 +94,6 @@ const recipeCreate = async function (req, res, next) {//create
   for (let stepImageIndex in req.files.stepsimages) {
     ImagesforSteps.push(`uploads/${hashFolder}/${+stepImageIndex + +req.files.images.length + 1}.jpg`)
   }
-
-
-  let DBingredientsId = [];
   // for (ingredient of ingredients) {
   //   await db.ingredients.findOrCreate({ where: { title: ingredient } }).then((ingredient) => {
   //     console.log(ingredient);
@@ -92,15 +101,18 @@ const recipeCreate = async function (req, res, next) {//create
   //   })
   // }
 
-  ingredientsList = ingredients.map((item) => {
+
+  let DBingredientsIds = [];
+
+  const getIingredientsListIds = ingredients.map((item) => {
     return db.ingredients.findOrCreate({ where: { title: item } }).then((ingredient) => {
       return ingredient[0].id
     })
   })
   // console.log(ingredient);
-  ingredientsList = await Promise.all(ingredientsList)
-  ingredientsList.forEach(element => {
-    DBingredientsId.push(element);
+  const ingredientsListIds = await Promise.all(getIingredientsListIds)
+  ingredientsListIds.forEach(id => {
+    DBingredientsIds.push(id);
   });
 
   let recipeId;
@@ -127,7 +139,7 @@ const recipeCreate = async function (req, res, next) {//create
     })
   })
 
-  for (ingredientId of DBingredientsId) {
+  for (ingredientId of DBingredientsIds) {
     db.ingredientsrecipes.create({ recipe_id: recipeId, ingredient_id: ingredientId }).catch(err => console.log('create error', err));
   }
   hashFolder = hash(rn());
@@ -141,6 +153,25 @@ const filter = async function (req, res) {
   let ingredients = req.query.ingredients || '';
   let direction = req.query.direction || 'ASC';
   let order_field = req.query.order_field || 'title';
+  ingredientsSearchObj = {}
+  if (ingredients.split('-').length > 1) {
+    // ingredientsSearchObj.where = {
+    //   title: ingredients.split('-')
+    // }
+    ingredientsSearchObj = ingredients.split('-');
+  }
+  else {
+    if (ingredients.length > 0) {
+      ingredientsSearchObj = ingredients;
+    }
+  }
+  // else {
+  //   ingredientsSearchObj.where = {
+  //     title: {
+  //       $in: []
+  //     }
+  //   }
+  // }
   try {
     const recipes = await db.recipes.findAll({
       where: {
@@ -150,37 +181,46 @@ const filter = async function (req, res) {
       },
       include: [{
         model: db.ingredients, as: 'ingredientsTable',
+        through: {
+          attributes: [],
+          where: {
+            title: { [Op.and]: ingredientsSearchObj }
+          }
+        },
         // where: {
-        //   // title: ingredients.split('-')
-        //   // title: { [Op.and]: ['cucumber', 'carrot'] }
+        // ingredientsSearchObj
+        // title: ingredients.split('-')
+        // title: { [Op.and]: ['cucumber', 'carrot'] }
         // }
       }],
       order: [[order_field, direction]]
     })
-    // return recipes;
-    let queryingresult = [];//filter ingredients
+    return recipes;
+    // let queryingresult = [];//filter ingredients
 
-    if (!req.query.ingredients) {
-      return recipes;
-    }
+    // if (!req.query.ingredients) {
+    //   return recipes;
+    // }
 
-    let ingredients = req.query.ingredients.split('-');
-    for (recipe of recipes) {
-      let j = 0;
-      for (ingredient of ingredients) {
-        for (let i = 0; i < recipe.ingredientsTable.length; i++) {
-          if (recipe.ingredientsTable[i].title == ingredient) {
-            j++;
-          }
-          if (j == ingredients.length) {
-            queryingresult.push(recipe);
-            j = 0;
-            break;
-          }
-        }
-      }
-    }
-    return queryingresult;
+    // await recipe1.setIngredients([]) // update
+
+    // let ingredients = req.query.ingredients.split('-');
+    // for (recipe of recipes) {
+    //   let j = 0;
+    //   for (ingredient of ingredients) {
+    //     for (let i = 0; i < recipe.ingredientsTable.length; i++) {
+    //       if (recipe.ingredientsTable[i].title == ingredient) {
+    //         j++;
+    //       }
+    //       if (j == ingredients.length) {
+    //         queryingresult.push(recipe);
+    //         j = 0;
+    //         break;
+    //       }
+    //     }
+    //   }
+    // }
+    // return queryingresult;
 
   } catch (error) {
     console.log(error);
@@ -199,17 +239,27 @@ const getSteps = function (req, res, next) {
     return res.status(200).json({ steps: steps, error: false });
   }).catch(err => res.status(500).json({ message: err.message }))
 }
-const recipeFilter = async function (req, res, next) {
+
+
+const recipeFilter = async function (req, res, next) {//show all filtred recipes
   let result = await filter(req, res);
-  res.send(result);
+  return res.send(result);
 }
 
 const recipeShow = function (req, res, next) {//show recipe
-  db.recipes.findOne({ where: { "id": req.params.id } }).then((recipe) => {
+  db.recipes.findOne({
+    where: { "id": req.params.id },
+    include: [{
+      model: db.steps,
+      where: {
+        "recipe_id": req.params.id
+      }
+    }]
+  }).then((recipe) => {
     if (recipe) {
       return res.json(recipe);
     }
-    return res.status(404).json({ msg: 'recipe not found', error: true });
+    return res.status(404).json({ message: 'recipe not found', error: true });
 
   })
 }
@@ -251,6 +301,63 @@ const recipeUpdate = function (req, res, next) {//update recipe
   // for (let i = 0; i < req.files.length; i++) {
   //     imgs.push(`uploads/${currentId}/${i + 1}.jpg`)
   // }
+
+
+
+
+
+  fileid = 0;
+  let ingredients = [];
+  ingredients = req.body.ingredients.split('|');
+  let steps = [];
+  steps = req.body.steps.split('|');
+  let imgs = [];
+  for (let i = 0; i < req.files.images.length; i++) {
+    imgs.push(`uploads/${hashFolder}/${i + 1}.jpg`)
+  }
+
+  let ImagesforSteps = [];
+  for (let stepImageIndex in req.files.stepsimages) {
+    ImagesforSteps.push(`uploads/${hashFolder}/${+stepImageIndex + +req.files.images.length + 1}.jpg`)
+  }
+
+
+
+
+
+
+  let DBingredientsId = [];
+
+  ingredientsList = ingredients.map((item) => {
+    return db.ingredients.findOrCreate({ where: { title: item } }).then((ingredient) => {
+      return ingredient[0].id
+    })
+  })
+  // console.log(ingredient);
+  // ingredientsList = await Promise.all(ingredientsList)
+  // ingredientsList.forEach(element => {
+  //   DBingredientsId.push(element);
+  // });
+
+
+
+
+  steps.map((step, index) => {
+    db.steps.create({
+      recipe_id: recipeId,
+      index: index,
+      text: step,
+      image: ImagesforSteps[index]
+    })
+  })
+
+  for (ingredientId of DBingredientsId) {
+    db.ingredientsrecipes.create({ recipe_id: recipeId, ingredient_id: ingredientId }).catch(err => console.log('create error', err));
+  }
+  hashFolder = hash(rn());
+
+
+  ///////////////////////////////////////////////////////////////////////////////
   updateObj.title = req.body.title;
   if (req.body.ingredients instanceof String) {
     updateObj.ingredients = req.body.ingredients.split('|');
