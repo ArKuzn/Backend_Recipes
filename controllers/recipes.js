@@ -154,24 +154,16 @@ const filter = async function (req, res) {
   let direction = req.query.direction || 'ASC';
   let order_field = req.query.order_field || 'title';
   ingredientsSearchObj = {}
+
+
   if (ingredients.split('-').length > 1) {
-    // ingredientsSearchObj.where = {
-    //   title: ingredients.split('-')
-    // }
-    ingredientsSearchObj = ingredients.split('-');
+    ingredientsSearchObj.title = ingredients.split('-');
   }
   else {
     if (ingredients.length > 0) {
-      ingredientsSearchObj = ingredients;
+      ingredientsSearchObj.title = ingredients;
     }
   }
-  // else {
-  //   ingredientsSearchObj.where = {
-  //     title: {
-  //       $in: []
-  //     }
-  //   }
-  // }
   try {
     const recipes = await db.recipes.findAll({
       where: {
@@ -181,17 +173,18 @@ const filter = async function (req, res) {
       },
       include: [{
         model: db.ingredients, as: 'ingredientsTable',
-        through: {
-          attributes: [],
-          where: {
-            title: { [Op.and]: ingredientsSearchObj }
-          }
-        },
-        // where: {
-        // ingredientsSearchObj
-        // title: ingredients.split('-')
-        // title: { [Op.and]: ['cucumber', 'carrot'] }
+        // through: {
+        //   attributes: [],
+        //   where: {
+        //     title: ingredientsSearchObj
+        //     // recipe_id: {
+        //     //   // where: {
+        //     //   //   title
+        //     //   // }
+        //     // }
+        //   }
         // }
+        where: ingredientsSearchObj
       }],
       order: [[order_field, direction]]
     })
@@ -251,10 +244,13 @@ const recipeShow = function (req, res, next) {//show recipe
     where: { "id": req.params.id },
     include: [{
       model: db.steps,
-      where: {
-        "recipe_id": req.params.id
-      }
-    }]
+      as: 'stepItem',
+      // order: [['index', 'ASC']]
+    },
+    {
+      model: db.ingredients,
+      as: 'ingredientsTable'
+    }],
   }).then((recipe) => {
     if (recipe) {
       return res.json(recipe);
@@ -263,11 +259,11 @@ const recipeShow = function (req, res, next) {//show recipe
 
   })
 }
-const recipeDel = function (req, res, next) {//delete
+const recipeDel = (req, res, next) => {//delete
   let folder;
   db.recipes.findOne({ where: { "id": req.params.id } }).then((recipe) => {
     folder = recipe.images[0].split('/')[1];
-    db.recipes.destroy({ where: { "id": req.params.id } }).then((recipes) => {
+    recipe.destroy({}).then((recipes) => {
       if (recipes) {
         console.log(`this is folder will be deleted ${folder}`);
         rimraf.sync(`./uploads/${folder}`)
@@ -277,6 +273,8 @@ const recipeDel = function (req, res, next) {//delete
       else {
         res.send('Recipe not found');
       }
+    }).catch(error => {
+      console.log(error)
     })
   })
 }
@@ -286,99 +284,80 @@ const recipeIngredients = function (req, res, next) {//get ingredients
   })
 
 }
-const recipeUpdate = function (req, res, next) {//update recipe
+// const testing = async function (recipe) {
+//   await recipe.setIngredientsTable([])
+//   console.log(recipe)
+// }
+const recipeUpdate = async function (req, res, next) {//update recipe
+
+  let idRecipe = req.params.id;
+  const recipe = await db.recipes.findOne({
+    where: {
+      id: req.params.id
+    },
+    include: [{
+      model: db.steps,
+      as: 'stepItem',
+      where: {
+        // "recipe_id": req.params.id
+      },
+      // order: [['index', 'DESC']]
+    }, {
+      model: db.ingredients,
+      as: 'ingredientsTable',
+    }
+
+    ]
+  })
+  console.log(recipe);
+  console.log(req);
+
+  //update ingredients
+  let ingredients = req.body.ingredients.split('|').map(ingredient => {
+    return db.ingredients.findOrCreate({
+      where: {
+        title: ingredient
+      }
+    }).then((DBingredient) => {
+      return DBingredient[0].id;
+    })
+  })
+  const ingredientListIds = await Promise.all(ingredients);
+  recipe.setIngredientsTable(ingredientListIds);
+  //update steps
+  let steps = req.body.steps.split('|').map((step, id) => {
+    return db.steps.findOrCreate({
+      where: {
+        [Op.and]: [{ text: step }, { index: id }]
+      },
+      defaults: {
+        text: step,
+        index: id
+      },
+    }).then((DBstep) => {
+      return DBstep[0].id;
+    })
+  })
+  const stepListIds = await Promise.all(steps);
+  recipe.setStepItem(stepListIds);
+  //update other fields
   let updateObj = {};
-  // let ingredients = [];
-  // let steps = [];
-  // if (req.body.ingredients) {
-  //     ingredients = req.body.ingredients.split('|');
-  // }
-  // if (req.body.steps) {
-
-  //     steps = req.body.steps.split('|');
-  // }
-  // let imgs = [];
-  // for (let i = 0; i < req.files.length; i++) {
-  //     imgs.push(`uploads/${currentId}/${i + 1}.jpg`)
-  // }
-
-
-
-
-
-  fileid = 0;
-  let ingredients = [];
-  ingredients = req.body.ingredients.split('|');
-  let steps = [];
-  steps = req.body.steps.split('|');
-  let imgs = [];
-  for (let i = 0; i < req.files.images.length; i++) {
-    imgs.push(`uploads/${hashFolder}/${i + 1}.jpg`)
-  }
-
-  let ImagesforSteps = [];
-  for (let stepImageIndex in req.files.stepsimages) {
-    ImagesforSteps.push(`uploads/${hashFolder}/${+stepImageIndex + +req.files.images.length + 1}.jpg`)
-  }
-
-
-
-
-
-
-  let DBingredientsId = [];
-
-  ingredientsList = ingredients.map((item) => {
-    return db.ingredients.findOrCreate({ where: { title: item } }).then((ingredient) => {
-      return ingredient[0].id
-    })
-  })
-  // console.log(ingredient);
-  // ingredientsList = await Promise.all(ingredientsList)
-  // ingredientsList.forEach(element => {
-  //   DBingredientsId.push(element);
-  // });
-
-
-
-
-  steps.map((step, index) => {
-    db.steps.create({
-      recipe_id: recipeId,
-      index: index,
-      text: step,
-      image: ImagesforSteps[index]
-    })
-  })
-
-  for (ingredientId of DBingredientsId) {
-    db.ingredientsrecipes.create({ recipe_id: recipeId, ingredient_id: ingredientId }).catch(err => console.log('create error', err));
-  }
-  hashFolder = hash(rn());
-
-
-  ///////////////////////////////////////////////////////////////////////////////
   updateObj.title = req.body.title;
-  if (req.body.ingredients instanceof String) {
-    updateObj.ingredients = req.body.ingredients.split('|');
-  }
-  if (req.body.steps instanceof String) {
-    updateObj.steps = req.body.steps.split('|');
-  }
   updateObj.calories = req.body.calories;
-  updateObj.difficult = req.body.difficult;
+  updateObj.difficult = req.body.difficult > 5 || req.body.difficult < 0 ? 5 : req.body.difficult;
   updateObj.duration = req.body.duration;
-  console.log(updateObj);
   db.recipes.update(
     updateObj,
     { where: { id: req.params.id } }
   ).then((recipe) => {
     console.log(recipe);
     if (recipe > 0) {
-      res.send('Recipe updated');
-    } else {
-      res.send('Recipe not found');
+      return res.status(200).json({ msg: 'Recipe updated', error: false });
     }
+    return res.status(404).json({ msg: 'Recipe not found', error: true });
+
+  }).catch((error) => {
+    return res.status(404).json({ msg: error, error: true });
   })
 }
 module.exports = {

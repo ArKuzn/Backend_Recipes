@@ -10,7 +10,7 @@ module.exports = router => {
     router.get('/filter', recipeCtrl.recipeFilter)//show all recipes with filter
     router.get('/:id', recipeCtrl.recipeShow)//show recipe
     router.delete('/:id', recipeCtrl.recipeDel)//delete
-    router.put('/:id', recipeCtrl.recipeUpdate)//recipe update
+    router.put('/:id', cpUpload, recipeCtrl.recipeUpdate)//recipe update
     router.get('/steps/:id', recipeCtrl.getSteps)
 
 };

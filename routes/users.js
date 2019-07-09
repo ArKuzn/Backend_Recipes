@@ -8,7 +8,7 @@ module.exports = router => {
     router.post('/registration', upload.single('avatar'), userCtrl.userRegister);
     router.get('/profile', AuthMiddl.GetAuth, userCtrl.userProfile);
     router.post('/login', userCtrl.userLogin);
-    router.delete('/:id', userCtrl.userDel);
+    router.delete('/:id', AuthMiddl.GetAuth, userCtrl.userDel);
     router.put('/:id', upload.single('avatar'), userCtrl.userUpdate);
     router.get('/', AuthMiddl.Auth, userCtrl.usersShowAll);
     router.get('/:id', userCtrl.userShow);

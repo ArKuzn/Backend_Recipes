@@ -81,23 +81,24 @@ const userLogin = function (req, res, next) {//login
 }
 const userDel = function (req, res, next) {//delete
     let folder;
+    if (req.body.tokenId != req.params.id) {
+        return res.status(403).json({ msg: "access error", error: false })
+    }
     db.users.findOne({ where: { "id": req.params.id } }).then((user) => {
         console.log(user.avatar.split('/')[2]);
         folder = user.avatar.split('/')[2];
-
         if (folder == 'default') {
             folder = null;
         }
-
         db.users.destroy({ where: { "id": req.params.id } }).then((user) => {
             if (user) {
                 console.log(`this folder will be deleted ${folder}`);
                 rimraf.sync(`./uploads/users/${folder}`)
                 // DelRecipe.destroy({});
-                res.send('User deleted')
+                res.status(200).json({ msg: 'User deleted', error: false });
             }
             else {
-                res.send('User not found');
+                res.status(404).json({ msg: 'User not found', error: true });
             }
         })
     })
