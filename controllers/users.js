@@ -57,7 +57,10 @@ const userRegister = function (req, res, next) {//register
                         res.send({ msg: 'Success! you have been registered', error: false, token: token });
                     }
                     console.log(created)
-                });
+                }).catch((error) => {
+                    console.log(error);
+                    return res.status(500).json({ msg: error.message, error: true })
+                })
         });
     })
 }
@@ -101,6 +104,9 @@ const userDel = function (req, res, next) {//delete
                 res.status(404).json({ msg: 'User not found', error: true });
             }
         })
+    }).catch((error) => {
+        console.log(error);
+        return res.status(500).json({ msg: error.message, error: true })
     })
 }
 const userUpdate = function (req, res, next) {//update           //upload.single('avatar')
@@ -139,18 +145,30 @@ const userUpdate = function (req, res, next) {//update           //upload.single
             res.send('Users not found');
 
         })
+    }).catch((error) => {
+        console.log(error);
+        return res.status(500).json({ msg: error.message, error: true })
     });
 }
 const userShow = function (req, res, next) {//show user   //Auth
     db.users.findByPk(req.params.id).then((user) => {
-
-        res.send(user);
+        if (user) {
+            res.send(user);
+        } else {
+            return res.status(200).json({ msg: "User deleted or not created", error: true })
+        }
+    }).catch((error) => {
+        console.log(error);
+        return res.status(500).json({ msg: error.message, error: true })
     })
 };
 const userProfile = function (req, res, next) {//show user   //Auth
     db.users.findByPk(req.body.tokenId).then((user) => {
 
         res.send(user);
+    }).catch((error) => {
+        console.log(error);
+        return res.status(500).json({ msg: error.message, error: true })
     })
 };
 const usersShowAll = function (req, res, next) {//show all //Auth
