@@ -2,18 +2,14 @@ var rimraf = require("rimraf");
 var multer = require("multer");
 var fs = require("fs");
 const db = require("../models");
-const jwt = require("jsonwebtoken");
-const jwtsecret = "mysecretkey";
 const hash = require("object-hash");
 const rn = require("random-number");
-const recipeCtrl = require("../controllers/recipes");
-const AuthMiddl = require("../middlewares/Authentication");
-var dir;
-let currentId = 0;
+const nodemailer = require("nodemailer");
 let fileid = 0;
 const Sequelize = require("sequelize");
 const Op = Sequelize.Op;
 var hashFolder = hash(rn());
+const testAccount = require('../config').email;
 var storage = multer.diskStorage({
   destination: function (req, file, cb) {
     let rec = `uploads/${hashFolder}`;
@@ -27,52 +23,83 @@ var storage = multer.diskStorage({
   }
 });
 
-const recipeAddFavorites = function (req, res, next) {
-  //add to favorite recipe AuthRecipe
-  console.log(`token id is ${req.body.tokenId}`);
-  db.users
-    .findByPk(req.body.tokenId)
-    .then(user => {
-      console.log(`this is user ${user}`);
-
-      if (!user) {
-        return res.status(404).json({ msg: "user not found", error: true });
-      }
-      let { favorites } = user;
-      console.log(`favorites before ${favorites}`);
-      for (let recipeId in favorites) {
-        if (favorites[recipeId] == req.params.id) {
-          favorites.splice(recipeId, 1);
-          return updateFavorites(favorites, req, res);
-        }
-      }
-      favorites.push(req.params.id);
-      return updateFavorites(favorites, req, res);
-    })
-    .catch(error => {
-      console.log(error);
-      return res.status(500).json({ msg: error.message, error: true });
-    });
-};
-const updateFavorites = function (favorites, req, res) {
-  db.users
-    .update({ favorites: favorites }, { where: { id: req.body.tokenId } })
-    .then(user => {
+const recipeAddFavorites = async function (req, res, next) {
+  db.users.findOne({
+    where: { id: req.body.tokenId },
+    include: [{
+      model: db.recipes,
+      through: {
+        attributes: []
+      },
+      as: "favoritesTable",
+    },]
+  })
+    .then(async (user) => {
       console.log(user);
-      if (user > 0) {
-        return res.status(200).json({
-          msg: "Recipe added to your favorites recipes",
-          error: false
-        });
+      const favorite = await user.hasFavoritesTable(+req.params.id);
+      if (favorite) {
+        await user.removeFavoritesTable(req.params.id);
+        return res.status(200).json({ msg: 'Recipe deleted from your favorites recipes', favorites: await user.getFavoritesTable(), error: false })
       }
-      return res.status(500).json({ msg: "Update error", error: true });
-    });
+      await user.addFavoritesTable(req.params.id);
+      return res.status(200).json({ msg: 'Recipe added to your favorites recipes', favorites: await user.getFavoritesTable(), error: false })
+    })
+    .catch((err) => {
+      return res.status(500).json({ msg: err.message, error: true })
+    })
 };
+
+const emalNotification = async (author, title, idRecipe) => {
+  try {
+    const user = await db.users.findOne({
+      where: { id: author },
+      include: [{
+        model: db.users,
+        through: {
+          attributes: []
+        },
+        as: "followers",
+      }]
+    }).catch((err) => {
+      console.log(err)
+    });
+    let followers = await user.getFollowers();
+    let loginFollowers = [];
+    loginFollowers = followers.map(el => el.login)
+    let transporter = nodemailer.createTransport({
+      host: "smtp.yandex.ru",
+      port: 587,
+      secure: false, // true for 465, false for other ports
+      auth: {
+        user: testAccount.user, // generated ethereal user
+        pass: testAccount.pass // generated ethereal password
+      }
+    });
+    let sendemails = loginFollowers.map((email) => {
+      transporter.sendMail({
+        from: '<axkuz97@yandex.ru>', // sender address
+        to: `${email}@yandex.ru`, // list of receivers
+        subject: `New recipe from ${user.login}`, // Subject line
+        text: "Hello world?", // plain text body
+        html: `<a href="http://localhost:3001/recipes/${idRecipe}">${title}</a>` // html body
+      });
+    })
+    await Promise.all(sendemails.map(function (email) {
+      return email
+        .catch(function (err) {
+          console.log(err.message); // some coding error in handling happened
+          return err
+        });
+    }))
+  } catch (err) {
+    console.log(err);
+    return false
+  }
+}
 
 const recipeCreate = async function (req, res, next) {
   //create
   fileid = 0;
-  debugger;
   if (!req.body.ingredients) {
     return res.status(400).json({ msg: "request haven't ingredients" });
   }
@@ -91,7 +118,7 @@ const recipeCreate = async function (req, res, next) {
   for (let stepImageIndex in req.files.stepsimages) {
     ImagesforSteps.push(
       `uploads/${hashFolder}/${
-      +stepImageIndex + req.files.images ? +req.files.images.length : 0 + 1
+      +stepImageIndex + (req.files.images.length + 1 || 1)
       }.jpg`
     );
   }
@@ -113,7 +140,6 @@ const recipeCreate = async function (req, res, next) {
   });
 
   let recipeId;
-  debugger;
   await db.recipes
     .create({
       title: req.body.title,
@@ -134,6 +160,7 @@ const recipeCreate = async function (req, res, next) {
     })
     .then(rec => {
       recipeId = rec.id;
+      emalNotification(req.body.author, req.body.title, rec.id);
     })
     .catch(error => {
       console.log(error);
@@ -178,6 +205,13 @@ const filter = async function (req, res) {
       ingredientsSearchObj.title = ingredients;
     }
   }
+  const pagination = req.query.page
+    ?
+    {
+      limit: 10,
+      offset: (req.query.page - 1) * 10 || 0,
+    }
+    : {}
   try {
     const recipes = await db.recipes.findAll({
       where: {
@@ -188,21 +222,37 @@ const filter = async function (req, res) {
       include: [
         {
           model: db.ingredients,
+          through: {
+            attributes: []
+          },
           as: "ingredientsTable",
           where: ingredientsSearchObj
         },
         {
           model: db.steps,
           as: "stepItem"
-          // order: [['index', 'ASC']]
-        }
+        },
+        {
+          model: db.users,
+          as: "author_user"
+        },
+        {
+          model: db.users,
+          as: "favoritesTable",
+          through: {
+            attributes: []
+          },
+        },
       ],
-      order: [[order_field, direction]]
+      order: [[order_field, direction]],
+      ...pagination
+      // limit: req.query.page ? 10 : false,
+      // offset: (req.query.page - 1) * 10 || 0,
     });
     return recipes;
   } catch (error) {
     console.log(error);
-    res.status(500).json({ msg: error.message, error: true });
+    return res.status(500).json({ msg: error.message, error: true });
   }
 };
 const recipeFilter = async function (req, res, next) {
@@ -220,12 +270,18 @@ const recipeShow = function (req, res, next) {
         {
           model: db.steps,
           as: "stepItem"
-          // order: [['index', 'ASC']]
         },
         {
           model: db.ingredients,
           as: "ingredientsTable"
-        }
+        },
+        {
+          model: db.users,
+          as: "favoritesTable",
+          through: {
+            attributes: []
+          },
+        },
       ]
     })
     .then(recipe => {
@@ -235,9 +291,27 @@ const recipeShow = function (req, res, next) {
       return res.status(404).json({ msg: "recipe not found", error: true });
     })
     .catch(error => {
-      res.status(500).json({ msg: error, error: true });
+      return res.status(500).json({ msg: error, error: true });
     });
 };
+
+
+const updateIngredients = async function (ingredients, req) {
+  await ingredients.map((ingredient, index) => {
+    try {
+      if (ingredient.recipes.length > 1) {
+        return console.log("ingredient has a recipe");
+      } else {
+        return ingredient.destroy({});
+      }
+    } catch (err) {
+      console.log(err);
+      return null;
+    }
+  });
+}
+
+
 
 const recipeDel = async function (req, res, next) {
   //delete
@@ -258,54 +332,98 @@ const recipeDel = async function (req, res, next) {
           }
         ]
       })
-      .catch(err => {
-        res.status(404).json({ msg: "Recipe not found", error: true });
-      });
     if (!recipe) {
       return res.status(404).json({ msg: "Recipe not found", error: true });
     }
     if (recipe.author != req.body.tokenId) {
       return res.status(401).json({ msg: "Access error", error: true });
     }
-    console.log(recipe.images[0].split("/")[1]);
-    // let test = recipe.images[0].split("/");
     folder =
       recipe.images[0].split("/")[1] == "default"
         ? null
         : recipe.images[0].split("/")[1];
-    // let ingredients = await recipe.getIngredientsTable();
     let ingredients = recipe.ingredientsTable;
     await recipe.destroy({});
     console.log(`this is folder will be deleted ${folder}`);
     rimraf.sync(`./uploads/${folder}`);
-
-    await ingredients.map((ingredient, index) => {
-      if (ingredient.recipes.length > 1) {
-        return console.log("ingredient has a recipe");
-      } else {
-        return ingredient.destroy({});
-      }
-    });
+    updateIngredients(ingredients);
     return res.status(200).json({ msg: "recipe deleted", error: false });
   } catch (err) {
     console.log(err);
-    res.status(500).json({ msg: error, error: true });
+    return res.status(500).json({ msg: error, error: true });
   }
 };
+
+
+
 
 const recipeIngredients = function (req, res, next) {
   //get ingredients
   db.ingredients.findAll({}).then(recipes => {
     return res.status(200).json({ recipes });
+  }).catch((err) => {
+    console.log(err);
+    return res.status(500).json({ err: true });
   });
 };
-// const testing = async function (recipe) {
-//   await recipe.setIngredientsTable([])
-//   console.log(recipe)
-// }
+
+const updateSteps = async function (recipe, stepsimages, ImageNumber, stepsRecipe, Recipeid) {
+  //update steps
+
+  //get new step images
+  let newimagesStep = [];
+  for (let fileId in stepsimages) {
+    newimagesStep[ImageNumber[fileId]] =
+      stepsimages[fileId].path;
+  }
+  //get old step images
+  let oldImages = stepsRecipe.split("|").map((step, id) => {
+    return db.steps
+      .findOne({
+        //find old step
+        where: {
+          recipe_id: Recipeid,
+          index: id
+        }
+      })
+      .then(DBstep => {
+        if (DBstep && DBstep.image) {
+          return DBstep.image;
+        }
+        return "uploads/default/image.png";
+      })
+      .catch((err) => {
+        console.log(err);
+        return null;
+      })
+  });
+  const oldImagesList = await Promise.all(oldImages);
+  let steps = stepsRecipe.split("|").map((step, id) => {
+    const queryObj = {
+      text: step,
+      index: id,
+      image: newimagesStep[id] || oldImagesList[id]
+    }
+    return db.steps
+      .findOrCreate({
+        where: queryObj,
+        defaults: queryObj
+      })
+      .then(DBstep => {
+        return DBstep[0].id;
+      })
+      .catch((err) => {
+        console.log(err);
+        return null;
+      })
+  });
+  const stepListIds = (await Promise.all(steps)) || [];
+  recipe.setStepItem(stepListIds);
+
+}
+
 const recipeUpdate = async function (req, res, next) {
   //update recipe
-
   let idRecipe = req.params.id;
   const recipe = await db.recipes
     .findOne({
@@ -316,23 +434,17 @@ const recipeUpdate = async function (req, res, next) {
         {
           model: db.steps,
           as: "stepItem",
-          where: {
-            // "recipe_id": req.params.id
-          }
-          // order: [['index', 'DESC']]
         },
         {
           model: db.ingredients,
-          as: "ingredientsTable"
+          as: "ingredientsTable",
+          include: [{ model: db.recipes }]
         }
       ]
     })
     .catch(error => {
-      console.log(error);
+      return res.status(404).json({ msg: "Recipe not found", error: true });
     });
-  console.log(recipe);
-  console.log(req);
-
   //update ingredients
   let ingredients = req.body.ingredients.split("|").map(ingredient => {
     return db.ingredients
@@ -344,65 +456,20 @@ const recipeUpdate = async function (req, res, next) {
       .then(DBingredient => {
         return DBingredient[0].id;
       })
-    // .catch(err => {
-    //   errorArray.push(err)
-    //   return null
-    // });
+      .catch((err) => {
+        // return res.status(500).json({ msg: err.message, error: true });
+        return null
+      })
   });
   const ingredientListIds = await Promise.all(ingredients);
-  // [1, null, 3, 4, null]
   recipe.setIngredientsTable(ingredientListIds);
-
   //update steps
-
-  //get new step images
-  let newimagesStep = [];
-  for (let fileId in req.files.stepsimages) {
-    newimagesStep[req.body.ImageNumber[fileId]] =
-      req.files.stepsimages[fileId].path;
-  }
-  //get old step images
-  let oldImages = req.body.steps.split("|").map((step, id) => {
-    return db.steps
-      .findOne({
-        //find old step
-        where: {
-          [Op.and]: [{ recipe_id: req.params.id }, { index: id }]
-        }
-      })
-      .then(DBstep => {
-        try {
-          return DBstep.image;
-        } catch {
-          return "uploads/default/image.png";
-        }
-      });
-  });
-  const oldImagesList = await Promise.all(oldImages);
-  let steps = req.body.steps.split("|").map((step, id) => {
-    return db.steps
-      .findOrCreate({
-        where: {
-          [Op.and]: [
-            { text: step },
-            { index: id },
-            { image: newimagesStep[id] || oldImagesList[id] }
-          ]
-        },
-        defaults: {
-          text: step,
-          index: id,
-          image: newimagesStep[id] || oldImagesList[id]
-        }
-      })
-      .then(DBstep => {
-        return DBstep[0].id;
-      });
-  });
-  const stepListIds = (await Promise.all(steps)) || [];
-  recipe.setStepItem(stepListIds);
+  updateSteps(recipe, req.files.stepsimages, req.body.ImageNumber, req.body.steps, req.params.id);
   //update images
-  const images = await db.recipes.findByPk(req.params.id);
+  const images = await db.recipes.findByPk(req.params.id).catch((err) => {
+    console.log(err);
+    return null;
+  });
   let newImages = images.images;
   for (let newimageId in req.files.images) {
     newImages.push(req.files.images[newimageId].path);
@@ -410,7 +477,7 @@ const recipeUpdate = async function (req, res, next) {
   let updateObj = {};
   updateObj.images = newImages;
   //update other fields
-
+  oldIngredients = recipe.ingredientsTable;
   updateObj.title = req.body.title;
   updateObj.calories = req.body.calories;
   updateObj.difficult =
@@ -437,6 +504,6 @@ module.exports = {
   recipeCreate,
   storage,
   recipeFilter,
-  // getSteps,
-  recipeIngredients
+  recipeIngredients,
+  emalNotification
 };

@@ -12,8 +12,6 @@ module.exports = (sequelize, DataTypes) => {
         model: models.ingredientsrecipes,
       },
       foreignKey: 'ingredient_id',
-
-
     });
   };
   return ingredients;

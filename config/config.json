@@ -1,35 +1,54 @@
 {
+  "production": {
+    "db": {
+      "username": "postgres",
+      "password": null,
+      "database": "Users",
+      "host": "127.0.0.1",
+      "dialect": "postgres",
+      "operatorsAliases": false,
+      "define": {
+        "timestamps": false
+      }
+    },
+    "email": {
+      "user": "axkuz97",
+      "pass": "12323qwe"
+    }
+  },
   "development": {
-    "username": "postgres",
-    "password": "postgres",
-    "database": "Users",
-    "host": "127.0.0.1",
-    "dialect": "postgres",
-    "operatorsAliases": false,
-    "define": {
-      "timestamps": false
+    "db": {
+      "username": "postgres",
+      "password": "postgres",
+      "database": "Users",
+      "host": "127.0.0.1",
+      "logging": false,
+      "dialect": "postgres",
+      "operatorsAliases": false,
+      "define": {
+        "timestamps": false
+      }
+    },
+    "email": {
+      "user": "axkuz97",
+      "pass": "12323qwe"
     }
   },
   "test": {
-    "username": "postgres",
-    "password": null,
-    "database": "Users",
-    "host": "127.0.0.1",
-    "dialect": "postgres",
-    "operatorsAliases": false,
-    "define": {
-      "timestamps": false
-    }
-  },
-  "production": {
-    "username": "postgres",
-    "password": null,
-    "database": "Users",
-    "host": "127.0.0.1",
-    "dialect": "postgres",
-    "operatorsAliases": false,
-    "define": {
-      "timestamps": false
+    "db": {
+      "username": "postgres",
+      "password": null,
+      "database": "Users",
+      "host": "127.0.0.1",
+      "dialect": "postgres",
+      "operatorsAliases": false,
+      "define": {
+        "timestamps": false
+      }
+    },
+    "email": {
+      "user": "axkuz97",
+      "pass": "12323qwe"
     }
   }
 }

@@ -20,25 +20,25 @@
 // db.sequelize = sequelize;
 // db.Sequelize = Sequelize;
 module.exports = (sequelize, DataTypes) => {
-    const steps = sequelize.define('steps', {
-        image: {
-            type: DataTypes.STRING
-        },
-        index: {
-            type: DataTypes.INTEGER
-        },
-        text: {
-            type: DataTypes.STRING
-        },
-        recipe_id: {
-            type: DataTypes.INTEGER
-        },
+  const steps = sequelize.define('steps', {
+    image: {
+      type: DataTypes.STRING
+    },
+    index: {
+      type: DataTypes.INTEGER
+    },
+    text: {
+      type: DataTypes.STRING
+    },
+    recipe_id: {
+      type: DataTypes.INTEGER
+    },
+  });
+  steps.associate = function (models) {
+    // associations can be defined here
+    models.steps.belongsTo(models.recipes, {
+      foreignKey: 'id',
     });
-    steps.associate = function (models) {
-        // associations can be defined here
-        models.steps.hasOne(models.recipes, {
-            foreignKey: 'id',
-        });
-    };
-    return steps;
+  };
+  return steps;
 };
