@@ -6,7 +6,7 @@ const hash = require("object-hash");
 
 const GetAuth = function (req, res, next) {
   try {
-    jwt.verify(req.query.token, jwtsecret, function (err, decoded) {
+    jwt.verify(req.query.token || req.headers.token, jwtsecret, function (err, decoded) {
       if (err) {
         return res.status(401).json({ msg: "invalid token", error: true });
       }
