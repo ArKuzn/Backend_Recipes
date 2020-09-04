@@ -1,5 +1,6 @@
 {
   "production": {
+    "use_env_variable": false,
     "db": {
       "username": "postgres",
       "password": null,
@@ -12,11 +13,12 @@
       }
     },
     "email": {
-      "user": "axkuz97",
-      "pass": "12323qwe"
+      "user": "email user",
+      "pass": "email password"
     }
   },
   "development": {
+    "use_env_variable": false,
     "db": {
       "username": "postgres",
       "password": "postgres",
@@ -30,11 +32,12 @@
       }
     },
     "email": {
-      "user": "axkuz97",
-      "pass": "12323qwe"
+      "user": "email user",
+      "pass": "email password"
     }
   },
-  "test": {
+  "staging": {
+    "use_env_variable": false,
     "db": {
       "username": "postgres",
       "password": null,
@@ -47,8 +50,8 @@
       }
     },
     "email": {
-      "user": "axkuz97",
-      "pass": "12323qwe"
+      "user": "email user",
+      "pass": "email password"
     }
   }
 }
